@@ -415,11 +415,10 @@ pub var lastFrameTime = std.atomic.Value(f64).init(0);
 /// Measures time between different frames' beginnings.
 pub var lastDeltaTime = std.atomic.Value(f64).init(0);
 
-var shouldExitToMenu = std.atomic.Value(bool).init(false);
-var exitNotification = std.atomic.Value(network.DisconnectType).init(.exit);
+pub var networkConnection: ?network.DisconnectType = std.atomic.AtomicPtr(null);
+
 pub fn exitToMenu(exitData: network.DisconnectType) void {
-	shouldExitToMenu.store(true, .monotonic);
-	exitNotification.store(exitData, .monotonic);
+	networkConnection.store(exitData, .monotonic);
 }
 
 
@@ -672,15 +671,14 @@ pub fn main() void { // MARK: main()
 			gui.windowlist.gpu_performance_measuring.stopQuery();
 		}
 
-		if(shouldExitToMenu.load(.monotonic)) {
-			shouldExitToMenu.store(false, .monotonic);
+		if(networkConnection.load(.monotonic) != null) {
 			if(game.world) |world| {
 				world.deinit();
 				game.world = null;
 			}
 			gui.openWindow("main");
-			exitNotification.load(.monotonic).showDisconnectNotification();
-			audio.setMusic("cubyz:cubyz");
+			networkConnection.load(.monotonic).showDisconnectNotification();
+			networkConnection.store(null, .monotonic);
 		}
 	}
 
