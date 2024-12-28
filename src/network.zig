@@ -22,10 +22,11 @@ const Vec3i = vec.Vec3i;
 const NeverFailingAllocator = main.utils.NeverFailingAllocator;
 
 pub const DisconnectType = enum(u8) {
-	exit = 0,
-	timeout = 1,
-	kick = 2,
-	connError = 3,
+	none = 0,
+	exit = 1,
+	timeout = 2,
+	kick = 3,
+	connError = 4,
 
 	pub fn showDisconnectNotification(self: DisconnectType) void {
 		main.gui.windowlist.notification.raiseNotification(self.getDisconnectMessage());
@@ -33,6 +34,7 @@ pub const DisconnectType = enum(u8) {
 
 	fn getDisconnectMessage(self: DisconnectType) []const u8 {
 		switch(self) {
+			.none => return "Not disconnected from server.",
 			.exit => return "Disconnected from server.",
 			.timeout => return "Connection timed out.",
 			.kick => return "Kicked from server.",
