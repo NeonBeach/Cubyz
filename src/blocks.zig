@@ -30,8 +30,8 @@ const allocator = arena.allocator();
 pub const maxBlockCount: usize = 65536; // 16 bit limit
 
 pub const BlockDrop = struct {
-	item: items.Item,
-	amount: f32,
+	items: []const items.ItemStack,
+	chance: f32,
 };
 
 /// Ores can be found underground in veins.
@@ -147,32 +147,37 @@ pub fn register(_: []const u8, id: []const u8, zon: ZonElement) u16 {
 }
 
 fn registerBlockDrop(typ: u16, zon: ZonElement) void {
-	const drops = zon.toSlice();
+	const drops = zon.getChild("drops").toSlice();
+	_blockDrops[typ] = allocator.alloc(BlockDrop, drops.len);
 
-	var result = allocator.alloc(BlockDrop, drops.len);
-	result.len = 0;
+	for(drops, 0..) |blockDrop, i| {
+		_blockDrops[typ][i].chance = blockDrop.get(f32, "chance", 1);
+		const itemZons = blockDrop.getChild("items").toSlice();
+		var resultItems = main.List(items.ItemStack).initCapacity(main.stackAllocator, itemZons.len);
+		defer resultItems.deinit();
 
-	for(drops) |blockDrop| {
-		var string = blockDrop.as([]const u8, "auto");
-		string = std.mem.trim(u8, string, " ");
-		var iterator = std.mem.splitScalar(u8, string, ' ');
+		for(itemZons) |itemZon| {
+			var string = itemZon.as([]const u8, "auto");
+			string = std.mem.trim(u8, string, " ");
+			var iterator = std.mem.splitScalar(u8, string, ' ');
+			var name = iterator.first();
+			var amount: u16 = 1;
+			while(iterator.next()) |next| {
+				if(next.len == 0) continue; // skip multiple spaces.
+				amount = std.fmt.parseInt(u16, name, 0) catch 1;
+				name = next;
+				break;
+			}
 
-		var name = iterator.next() orelse continue;
-		var amount: f32 = 1;
-		while(iterator.next()) |next| {
-			if(next.len == 0) continue; // skip multiple spaces.
-			amount = std.fmt.parseFloat(f32, name) catch 1;
-			name = next;
-			break;
+			if(std.mem.eql(u8, name, "auto")) {
+				name = _id[typ];
+			}
+
+			const item = items.getByID(name) orelse continue;
+			resultItems.append(.{.item = .{.baseItem = item}, .amount = amount});
 		}
 
-		if(std.mem.eql(u8, name, "auto")) {
-			name = _id[typ];
-		}
-
-		const item = items.getByID(name) orelse continue;
-		result.len += 1;
-		result[result.len - 1] = BlockDrop{.item = items.Item{.baseItem = item}, .amount = amount};
+		_blockDrops[typ][i].items = allocator.dupe(items.ItemStack, resultItems.items);
 	}
 }
 
@@ -516,7 +521,7 @@ pub const meshes = struct { // MARK: meshes
 		const path = buffer[0.._path.len];
 		const textureInfoPath = extendedPath(path, &buffer, "_textureInfo.zig.zon");
 		const textureInfoZon = main.files.readToZon(main.stackAllocator, textureInfoPath) catch .null;
-		defer textureInfoZon.free(main.stackAllocator);
+		defer textureInfoZon.deinit(main.stackAllocator);
 		const animationFrames = textureInfoZon.get(u32, "frames", 1);
 		const animationTime = textureInfoZon.get(u32, "time", 1);
 		animation.append(.{.startFrame = @intCast(blockTextures.items.len), .frames = animationFrames, .time = animationTime});

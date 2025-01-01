@@ -47,34 +47,22 @@ const GuiCommandQueue = struct { // MARK: GuiCommandQueue
 		action: Action,
 	};
 
-	var commands: List(Command) = undefined;
-	var mutex: std.Thread.Mutex = .{};
+	var commands: main.utils.ConcurrentQueue(Command) = undefined;
 
 	fn init() void {
-		mutex.lock();
-		defer mutex.unlock();
-		commands = .init(main.globalAllocator);
+		commands = .init(main.globalAllocator, 16);
 	}
 
 	fn deinit() void {
-		mutex.lock();
-		defer mutex.unlock();
 		commands.deinit();
 	}
 
 	fn scheduleCommand(command: Command) void {
-		mutex.lock();
-		defer mutex.unlock();
-		commands.append(command);
+		commands.enqueue(command);
 	}
 
 	fn executeCommands() void {
-		mutex.lock();
-		const commands_ = main.stackAllocator.dupe(Command, commands.items);
-		defer main.stackAllocator.free(commands_);
-		commands.clearAndFree();
-		mutex.unlock();
-		for(commands_) |command| {
+		while(commands.dequeue()) |command| {
 			switch(command.action) {
 				.open => {
 					executeOpenWindowCommand(command.window);
@@ -186,7 +174,7 @@ pub fn deinit() void {
 
 pub fn save() void { // MARK: save()
 	const guiZon = ZonElement.initObject(main.stackAllocator);
-	defer guiZon.free(main.stackAllocator);
+	defer guiZon.deinit(main.stackAllocator);
 	for(windowList.items) |window| {
 		const windowZon = ZonElement.initObject(main.stackAllocator);
 		for(window.relativePosition, 0..) |relPos, i| {
@@ -231,7 +219,7 @@ fn load() void {
 		}
 		break :blk .null;
 	};
-	defer zon.free(main.stackAllocator);
+	defer zon.deinit(main.stackAllocator);
 
 	for(windowList.items) |window| {
 		const windowZon = zon.getChild(window.id);
